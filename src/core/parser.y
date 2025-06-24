@@ -37,6 +37,8 @@
 #endif
 
 #include "core/SourceFile.h"
+#include "core/SourceFileCache.h"
+#include "core/FileHasher.h"
 #include "core/UserModule.h"
 #include "core/ModuleInstantiation.h"
 #include "core/Assignment.h"
@@ -810,6 +812,22 @@ bool parse(SourceFile *&file, const std::string& text, const std::string &filena
   fs::path parser_sourcefile = fs::path(filepath).generic_string();
   lexer_set_parser_sourcefile(parser_sourcefile);
 
+  // HASH-BASED CACHE CHECK: Try to get cached parse result
+  // Only for non-main files to avoid complexity with command-line parameter handling
+  if (!parsingMainFile && !filename.empty()) {
+    std::string contentHash = FileHasher::calculateContentHash(text);
+    if (!contentHash.empty()) {
+      // For pure content-based caching, we use just the content hash since
+      // we already have the text and don't need to resolve dependencies yet
+      SourceFile *cachedFile = SourceFileCache::instance()->lookupByHash(contentHash);
+      if (cachedFile) {
+        PRINTDB("Using hash-cached parse result for: %s (%p)", filename % cachedFile);
+        file = cachedFile;
+        return true;
+      }
+    }
+  }
+
   lexerin = NULL;
   parser_error_pos = -1;
   parser_input_buffer = text.c_str();
@@ -832,6 +850,18 @@ bool parse(SourceFile *&file, const std::string& text, const std::string &filena
 
   file = rootfile;
   if (parserretval != 0) return false;
+
+  // HASH-BASED CACHE STORE: Cache successful parse result
+  // Only for non-main files to avoid complexity with command-line parameter handling
+  if (!parsingMainFile && !filename.empty()) {
+    std::string contentHash = FileHasher::calculateContentHash(text);
+    if (!contentHash.empty()) {
+      // Cache the successful parse result using content hash
+      std::vector<std::string> dependencies; // Will be populated later when dependencies are resolved
+      SourceFileCache::instance()->cacheByHash(contentHash, rootfile, dependencies);
+      PRINTDB("Cached parse result by content hash: %s -> %s", filename % contentHash);
+    }
+  }
 
   parser_error_pos = -1;
   parser_input_buffer = nullptr;

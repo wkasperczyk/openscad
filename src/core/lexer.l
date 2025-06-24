@@ -37,6 +37,8 @@
 #include "core/Assignment.h"
 #include "parser.hxx"
 #include "core/SourceFile.h"
+#include "core/SourceFileCache.h"
+#include "core/FileHasher.h"
 #include <assert.h>
 #include <boost/lexical_cast.hpp>
 #include <filesystem>
@@ -354,6 +356,39 @@ void includefile(const Location& loc)
 
   std::string fullname = fullpath.generic_string();
 
+  // HASH-BASED CACHE CHECK: Try to use cached include processing
+  // Check if this file is already cached and its content hasn't changed
+  std::string fileHash = FileHasher::calculateFileHash(fullname);
+  if (!fileHash.empty()) {
+    SourceFile *cachedFile = SourceFileCache::instance()->lookupByHash(fileHash);
+    if (cachedFile) {
+      // File is cached - merge its modules, functions, and assignments into current scope
+      PRINTDB("Using hash-cached include processing for: %s (%p)", fullname % cachedFile);
+      
+      // Copy modules from cached file into current root file scope
+      for (const auto& module : cachedFile->scope.modules) {
+        rootfile->scope.modules[module.first] = module.second;
+      }
+      
+      // Copy functions from cached file into current root file scope  
+      for (const auto& function : cachedFile->scope.functions) {
+        rootfile->scope.functions[function.first] = function.second;
+      }
+      
+      // Copy assignments from cached file into current root file scope
+      for (const auto& assignment : cachedFile->scope.assignments) {
+        rootfile->scope.assignments.push_back(assignment);
+      }
+      
+      // Still need to track dependencies and clean up state
+      filepath.clear();
+      filename.clear();
+      handle_dep(fullname);
+      return;
+    }
+  }
+
+  // FALLBACK: Standard include processing when cache miss
   filepath.clear();
   filename_stack.push_back(std::make_shared<fs::path>(fullpath));
 

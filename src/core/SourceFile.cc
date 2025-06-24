@@ -26,6 +26,7 @@
 
 #include "core/SourceFile.h"
 #include "core/SourceFileCache.h"
+#include "core/FileHasher.h"
 #include "core/node.h"
 #include "utils/printutils.h"
 #include "utils/exceptions.h"
@@ -200,4 +201,43 @@ const std::string SourceFile::getFullpath() const {
   } else {
     return "";
   }
+}
+
+// Hash-based caching support
+std::vector<std::string> SourceFile::getAllDependencies() const
+{
+  std::vector<std::string> dependencies;
+  
+  // Add all include dependencies (convert to absolute paths)
+  for (const auto& include : this->includes) {
+    dependencies.push_back(include.second); // fullpath is already stored
+  }
+  
+  // Add all used library dependencies (ensure they are absolute paths)  
+  for (const auto& usedlib : this->usedlibs) {
+    if (fs::path(usedlib).is_absolute()) {
+      dependencies.push_back(usedlib);
+    } else {
+      // Convert relative path to absolute using the search path
+      auto fullpath = find_valid_path(this->path, usedlib);
+      if (!fullpath.empty()) {
+        dependencies.push_back(fullpath.generic_string());
+      }
+      // Note: If path cannot be resolved, we skip it rather than fail
+      // This matches the existing behavior in handleDependencies()
+    }
+  }
+  
+  return dependencies;
+}
+
+std::string SourceFile::calculateDependencyChainHash() const
+{
+  std::string mainFile = getFullpath();
+  if (mainFile.empty()) {
+    return "";
+  }
+  
+  std::vector<std::string> dependencies = getAllDependencies();
+  return FileHasher::calculateDependencyChainHash(mainFile, dependencies);
 }

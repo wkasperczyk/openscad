@@ -812,6 +812,7 @@ set(CORE_SOURCES
   src/core/Settings.cc
   src/core/SourceFile.cc
   src/core/SourceFileCache.cc
+  src/core/FileHasher.cc
   src/core/StatCache.cc
   src/core/SurfaceNode.cc
   src/core/TextNode.cc

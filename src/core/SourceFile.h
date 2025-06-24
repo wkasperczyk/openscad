@@ -34,6 +34,10 @@ public:
   const std::string& getFilename() const { return this->filename; }
   const std::string getFullpath() const;
 
+  // Hash-based caching support
+  std::vector<std::string> getAllDependencies() const;
+  std::string calculateDependencyChainHash() const;
+
   LocalScope scope;
   std::vector<std::string> usedlibs;
 
