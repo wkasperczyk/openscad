@@ -89,7 +89,7 @@ std::shared_ptr<const Geometry> GeometryEvaluator::evaluateGeometry(const Abstra
         // also in the indeterminate state so we cannot just use a boolean comparison. See #1061
         bool convex = bool(ps->convexValue()); // bool is true only if tribool is true, (not indeterminate and not false)
         if (!convex) {
-          ps = PolySetUtils::tessellate_faces(*ps);
+          ps = PolySetUtils::tessellate_faces_cached(*ps);
         }
       }
       return ps;

@@ -13,6 +13,9 @@
 // Include necessary headers instead of forward declarations
 #include "geometry/linalg.h"
 
+// Forward declarations
+class PolySet;
+
 // Forward declarations for CGAL types to avoid heavy includes
 #ifdef ENABLE_CGAL
 #include "geometry/cgal/cgal.h"
@@ -69,6 +72,15 @@ namespace IntermediateResults {
     explicit PointCloud(std::vector<Vector3d>&& pts) : points(std::move(pts)) {}
     
     size_t memoryUsage() const { return points.size() * sizeof(Vector3d); }
+  };
+
+  // Tessellated PolySet for tessellation operations
+  struct TessellatedPolySet {
+    std::shared_ptr<const PolySet> tessellated_polyset;
+    
+    explicit TessellatedPolySet(std::shared_ptr<const PolySet> ps) : tessellated_polyset(std::move(ps)) {}
+    
+    size_t memoryUsage() const;
   };
 }
 
@@ -127,6 +139,7 @@ using ConvexDecompositionCache = IntermediateCache<IntermediateResults::ConvexDe
 using TransformationMatrixCache = IntermediateCache<IntermediateResults::TransformationMatrix>;
 using SliceParametersCache = IntermediateCache<IntermediateResults::SliceParameters>;
 using PointCloudCache = IntermediateCache<IntermediateResults::PointCloud>;
+using TessellationCache = IntermediateCache<IntermediateResults::TessellatedPolySet>;
 
 // Global cache manager for intermediate computational results
 class IntermediateCacheManager {
@@ -138,10 +151,11 @@ public:
   TransformationMatrixCache& transformationMatrixCache() { return transformation_matrix_cache_; }
   SliceParametersCache& sliceParametersCache() { return slice_parameters_cache_; }
   PointCloudCache& pointCloudCache() { return point_cloud_cache_; }
+  TessellationCache& tessellationCache() { return tessellation_cache_; }
 
   // Global operations
   void clearAll();
-  void setMemoryLimits(size_t convex_mb, size_t transform_mb, size_t slice_mb, size_t point_mb);
+  void setMemoryLimits(size_t convex_mb, size_t transform_mb, size_t slice_mb, size_t point_mb, size_t tessellation_mb);
   
   // Statistics and debugging
   void printStatistics() const;
@@ -154,6 +168,7 @@ private:
   TransformationMatrixCache transformation_matrix_cache_{10}; // 10MB default  
   SliceParametersCache slice_parameters_cache_{10}; // 10MB default
   PointCloudCache point_cloud_cache_{15}; // 15MB default
+  TessellationCache tessellation_cache_{20}; // 20MB default
 };
 
 // Utility functions for cache key generation
@@ -171,6 +186,9 @@ namespace CacheKeyUtils {
   
   // Generate cache key for point extraction
   std::string pointCloudKey(const std::shared_ptr<const Geometry>& geom);
+
+  // Generate cache key for tessellation
+  std::string tessellationKey(const std::shared_ptr<const PolySet>& polyset);
 
   // Fast hash function for floating point parameters
   std::string hashFloats(const std::vector<double>& values);

@@ -14,6 +14,7 @@
 #include "geometry/PolySet.h"
 #include "geometry/PolySetBuilder.h"
 #include "geometry/Polygon2d.h"
+#include "geometry/IntermediateCache.h"
 #include "utils/printutils.h"
 #include "geometry/GeometryUtils.h"
 #ifdef ENABLE_CGAL
@@ -164,6 +165,48 @@ std::unique_ptr<PolySet> tessellate_faces(const PolySet& polyset)
     LOG(message_group::Warning, "PolySet has degenerate polygons");
   }
   return result;
+}
+
+std::unique_ptr<PolySet> tessellate_faces_cached(const PolySet& inps) {
+  // Check if already triangular - no tessellation needed
+  if (inps.isTriangular()) {
+    // Create a copy of the triangular PolySet
+    auto result = std::make_unique<PolySet>(inps.getDimension(), inps.convexValue());
+    result->setConvexity(inps.getConvexity());
+    result->setTriangular(true);
+    result->vertices = inps.vertices;
+    result->indices = inps.indices;
+    result->color_indices = inps.color_indices;
+    result->colors = inps.colors;
+    return result;
+  }
+  
+  // Check cache first
+  auto& cache = IntermediateCacheManager::instance().tessellationCache();
+  auto polyset_shared = std::make_shared<const PolySet>(inps);  // Create shared_ptr for key generation
+  auto cache_key = CacheKeyUtils::tessellationKey(polyset_shared);
+  
+  if (cache.contains(cache_key)) {
+    // Cache hit - return cached tessellated result
+    auto cached_result = cache.get(cache_key);
+    if (cached_result && cached_result->tessellated_polyset) {
+      // Create a copy of the cached result to return as unique_ptr
+      auto result = std::make_unique<PolySet>(*cached_result->tessellated_polyset);
+      return result;
+    }
+  }
+  
+  // Cache miss - compute tessellation
+  auto tessellated = tessellate_faces(inps);
+  
+  if (tessellated) {
+    // Cache the result for future use
+    auto tessellated_shared = std::shared_ptr<const PolySet>(new PolySet(*tessellated));
+    auto cache_entry = std::make_shared<IntermediateResults::TessellatedPolySet>(tessellated_shared);
+    cache.insert(cache_key, cache_entry);
+  }
+  
+  return tessellated;
 }
 
 bool is_approximately_convex(const PolySet& ps) {

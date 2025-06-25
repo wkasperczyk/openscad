@@ -29,6 +29,7 @@ private slots:
   void testTransformationMatrixCache();
   void testSliceParametersCache();
   void testPointCloudCache();
+  void testTessellationCache();
   
   // Test cache manager
   void testIntermediateCacheManager();

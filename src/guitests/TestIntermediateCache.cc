@@ -211,6 +211,56 @@ void TestIntermediateCache::testPointCloudCache() {
   QVERIFY((retrieved->points[3] - Vector3d(0, 0, 1)).norm() < 1e-10);
 }
 
+void TestIntermediateCache::testTessellationCache() {
+  auto& cache = IntermediateCacheManager::instance().tessellationCache();
+  
+  // Create a simple test PolySet with a quad that needs tessellation
+  auto ps = std::make_shared<PolySet>(3);
+  ps->vertices.emplace_back(0, 0, 0);
+  ps->vertices.emplace_back(1, 0, 0);
+  ps->vertices.emplace_back(1, 1, 0);
+  ps->vertices.emplace_back(0, 1, 0);
+  ps->indices.push_back({0, 1, 2, 3}); // Quad face
+  
+  // Create tessellated result (triangulated)
+  auto tessellated_ps = std::make_shared<PolySet>(3);
+  tessellated_ps->setTriangular(true);
+  tessellated_ps->vertices = ps->vertices;
+  tessellated_ps->indices.push_back({0, 1, 2}); // First triangle
+  tessellated_ps->indices.push_back({0, 2, 3}); // Second triangle
+  
+  auto cached_result = std::make_shared<IntermediateResults::TessellatedPolySet>(tessellated_ps);
+  
+  // Generate cache key
+  auto key = CacheKeyUtils::tessellationKey(ps);
+  QVERIFY(!key.empty());
+  
+  // Cache should be empty initially
+  QVERIFY(!cache.contains(key));
+  
+  // Insert tessellated result
+  QVERIFY(cache.insert(key, cached_result));
+  
+  // Verify cache hit
+  QVERIFY(cache.contains(key));
+  
+  // Retrieve from cache
+  auto retrieved = cache.get(key);
+  QVERIFY(retrieved != nullptr);
+  QVERIFY(retrieved->tessellated_polyset);
+  QVERIFY(retrieved->tessellated_polyset->isTriangular());
+  QCOMPARE(retrieved->tessellated_polyset->vertices.size(), static_cast<size_t>(4));
+  QCOMPARE(retrieved->tessellated_polyset->indices.size(), static_cast<size_t>(2));
+  
+  // Verify memory usage calculation
+  size_t memory_usage = retrieved->memoryUsage();
+  QVERIFY(memory_usage > 0);
+  
+  // Memory usage should account for vertices and indices
+  size_t expected_min = 4 * sizeof(Vector3d) + 2 * sizeof(std::vector<int>) + 6 * sizeof(int);
+  QVERIFY(memory_usage >= expected_min);
+}
+
 void TestIntermediateCache::testIntermediateCacheManager() {
   auto& manager = IntermediateCacheManager::instance();
   
@@ -219,6 +269,7 @@ void TestIntermediateCache::testIntermediateCacheManager() {
   QVERIFY(&manager.transformationMatrixCache() != nullptr);
   QVERIFY(&manager.sliceParametersCache() != nullptr);
   QVERIFY(&manager.pointCloudCache() != nullptr);
+  QVERIFY(&manager.tessellationCache() != nullptr);
   
   // Test global clear
   manager.clearAll();
@@ -226,6 +277,7 @@ void TestIntermediateCache::testIntermediateCacheManager() {
   QCOMPARE(manager.transformationMatrixCache().size(), static_cast<size_t>(0));
   QCOMPARE(manager.sliceParametersCache().size(), static_cast<size_t>(0));
   QCOMPARE(manager.pointCloudCache().size(), static_cast<size_t>(0));
+  QCOMPARE(manager.tessellationCache().size(), static_cast<size_t>(0));
 }
 
 void TestIntermediateCache::testGlobalCacheOperations() {
@@ -244,7 +296,7 @@ void TestIntermediateCache::testGlobalCacheOperations() {
   QVERIFY(manager.transformationMatrixCache().size() > 0);
   
   // Test memory limits
-  manager.setMemoryLimits(10, 5, 5, 5); // MB
+  manager.setMemoryLimits(10, 5, 5, 5, 8); // MB
   QCOMPARE(manager.convexDecompositionCache().maxCostMB(), static_cast<size_t>(10));
   QCOMPARE(manager.transformationMatrixCache().maxCostMB(), static_cast<size_t>(5));
   
