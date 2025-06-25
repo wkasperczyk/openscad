@@ -41,3 +41,20 @@ module hull3null() {
 }
 hull3null();
 
+// Point cloud cache test - reuse same geometry in multiple hull operations
+module cache_test_geometry() {
+  cube([2,2,2]);
+  translate([4,0,0]) cylinder(r=1, h=3);
+}
+
+// First hull operation - will populate point cloud cache
+translate([0,25,0]) hull() {
+  cache_test_geometry();
+}
+
+// Second hull operation - should reuse cached point clouds
+translate([15,25,0]) hull() {
+  cache_test_geometry();
+  translate([0,6,0]) sphere(r=1.5);
+}
+

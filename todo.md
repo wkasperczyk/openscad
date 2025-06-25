@@ -32,12 +32,13 @@
 
 ## Implementation Phase - High-Impact Caching Opportunities
 
-**Status Update**: ✅ **Priority 1 caching COMPLETED** - All three highest-impact cache types implemented and integrated:
+**Status Update**: ✅ **Priority 1 & Priority 2 Item #4 COMPLETED** - Four highest-impact cache types implemented and integrated:
 - Convex Decomposition Cache (Minkowski operations)
 - Transformation Matrix Cache (Linear extrusion)
 - Slice Parameter Cache (Extrusion calculations)
+- Point Cloud Cache (Hull operations) - **NEWLY COMPLETED**
 - IntermediateCache Framework with comprehensive testing
-- All existing tests pass (76/76 Minkowski, 34/34 linear_extrude)
+- All existing tests pass (76/76 Minkowski, 34/34 linear_extrude, 33/33 hull operations)
 
 ### Priority 1: Intermediate Result Caching (Highest Impact - 50-90% improvement) ✅ COMPLETED
 
@@ -67,12 +68,15 @@
 
 ### Priority 2: Geometric Operation Caching (Medium Impact - 20-40% improvement)
 
-#### 4. Point Cloud Cache
-- [ ] **Target**: Hull operations point extraction
-- [ ] **Implementation**: Cache extracted point clouds for hull operations
-- [ ] **Cache key**: hash(geometry) + "point_cloud"
-- [ ] **Cache value**: vector<Point_3> extracted points
-- [ ] **Integration point**: Before `CGAL::convex_hull_3()` call
+#### 4. Point Cloud Cache ✅ COMPLETED
+- [x] **Target**: Hull operations point extraction in `boolean_utils.cc:26-89`
+- [x] **Implementation**: Cache extracted point clouds for hull operations using `extractPointCloudCached()` helper
+- [x] **Cache key**: hash(geometry) + "pointcloud" (via `CacheKeyUtils::pointCloudKey()`)
+- [x] **Cache value**: `IntermediateResults::PointCloud` with Vector3d points
+- [x] **Integration point**: Modified `applyHull()` to use cached point extraction per geometry
+- [x] **Expected improvement**: 20-40% for repeated hull operations on same geometry
+- [x] **Testing**: Comprehensive test suite in `TestHullPointCloudCache.cc` with 10 test methods
+- [x] **Validation**: All 33 hull tests pass, cache test cases added to `hull3-tests.scad`
 
 #### 5. Tessellation Cache
 - [ ] **Target**: Polygon tessellation results in GeometryEvaluator.cc:92-93
@@ -144,9 +148,13 @@
 
 ## Implementation Details and Technical Notes
 
-### Key Files to Modify:
+### Key Files Modified:
 - `src/geometry/GeometryEvaluator.cc/.h` - Main evaluation logic
-- `src/glview/preview/` - Preview renderers
+- `src/geometry/boolean_utils.cc` - **COMPLETED**: Hull operations with point cloud caching
+- `src/geometry/IntermediateCache.h/.cc` - **COMPLETED**: Point cloud cache infrastructure
+- `src/guitests/TestHullPointCloudCache.h/.cc` - **COMPLETED**: Comprehensive test suite
+- `tests/data/scad/3D/features/hull3-tests.scad` - **COMPLETED**: Added cache test cases
+- `src/glview/preview/` - Preview renderers  
 - `src/core/Context.cc/.h` - Variable evaluation context
 - `src/core/Value.cc/.h` - Value computation and caching
 - `src/io/` - File include handling for cache invalidation

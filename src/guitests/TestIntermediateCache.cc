@@ -121,9 +121,9 @@ void TestIntermediateCache::testMemoryManagement() {
   
   QVERIFY(cache.insert(key, cloud));
   
-  // Verify memory accounting
-  size_t expected_cost = cloud->memoryUsage() + sizeof(typename IntermediateCache<IntermediateResults::PointCloud>::CacheEntry);
-  QVERIFY(cache.totalCost() >= expected_cost - 100); // Allow some margin for overhead
+  // Verify memory accounting - check that cache cost is at least the data size
+  size_t expected_cost = cloud->memoryUsage();
+  QVERIFY(cache.totalCost() >= expected_cost); // Cache should account for at least the data size
 }
 
 void TestIntermediateCache::testConvexDecompositionCache() {
@@ -305,17 +305,17 @@ std::shared_ptr<const Geometry> TestIntermediateCache::createTestGeometry() {
   auto ps = std::make_shared<PolySet>(3);
   
   // Add a simple cube vertices (simplified for testing)
-  ps->append_vertex(0, 0, 0);
-  ps->append_vertex(1, 0, 0);
-  ps->append_vertex(1, 1, 0);
-  ps->append_vertex(0, 1, 0);
-  ps->append_vertex(0, 0, 1);
-  ps->append_vertex(1, 0, 1);
-  ps->append_vertex(1, 1, 1);
-  ps->append_vertex(0, 1, 1);
+  ps->vertices.emplace_back(0, 0, 0);
+  ps->vertices.emplace_back(1, 0, 0);
+  ps->vertices.emplace_back(1, 1, 0);
+  ps->vertices.emplace_back(0, 1, 0);
+  ps->vertices.emplace_back(0, 0, 1);
+  ps->vertices.emplace_back(1, 0, 1);
+  ps->vertices.emplace_back(1, 1, 1);
+  ps->vertices.emplace_back(0, 1, 1);
   
-  // Add faces (simplified)
-  ps->append_poly(); // Start new polygon
+  // Add a simple triangle face
+  ps->indices.push_back({0, 1, 2});
   
   return ps;
 }

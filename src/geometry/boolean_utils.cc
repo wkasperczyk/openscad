@@ -21,14 +21,34 @@
 
 #include "geometry/Reindexer.h"
 #include "geometry/GeometryUtils.h"
+#include "geometry/IntermediateCache.h"
 
 #ifdef ENABLE_CGAL
-std::unique_ptr<PolySet> applyHull(const Geometry::Geometries& children)
-{
-  using Hull_kernel = CGAL::Epick;
-  // Collect point cloud
-  Reindexer<Hull_kernel::Point_3> reindexer;
 
+// Helper function to extract point cloud from geometry with caching
+static std::vector<CGAL::Epick::Point_3> extractPointCloudCached(const std::shared_ptr<const Geometry>& geom) {
+  using Hull_kernel = CGAL::Epick;
+  
+  // Check cache first
+  auto& cache = IntermediateCacheManager::instance().pointCloudCache();
+  std::string cache_key = CacheKeyUtils::pointCloudKey(geom);
+  
+  auto cached_cloud = cache.get(cache_key);
+  if (cached_cloud) {
+    // Convert cached Vector3d points to Hull_kernel::Point_3
+    std::vector<Hull_kernel::Point_3> points;
+    points.reserve(cached_cloud->points.size());
+    for (const auto& pt : cached_cloud->points) {
+      points.emplace_back(pt.x(), pt.y(), pt.z());
+    }
+    PRINTDB("Point cloud cache hit for geometry: %1% points", points.size());
+    return points;
+  }
+  
+  // Cache miss - extract points fresh
+  std::vector<Hull_kernel::Point_3> points;
+  Reindexer<Hull_kernel::Point_3> reindexer;
+  
   auto addCapacity = [&](const auto n) {
     reindexer.reserve(reindexer.size() + n);
   };
@@ -37,35 +57,72 @@ std::unique_ptr<PolySet> applyHull(const Geometry::Geometries& children)
     reindexer.lookup(v);
   };
 
-  for (const auto& item : children) {
-    auto& chgeom = item.second;
 #ifdef ENABLE_CGAL
-    if (const auto *N = dynamic_cast<const CGALNefGeometry*>(chgeom.get())) {
-      if (!N->isEmpty()) {
-        addCapacity(N->p3->number_of_vertices());
-        for (auto it = N->p3->vertices_begin(); it != N->p3->vertices_end(); ++it) {
-          addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(it->point()));
-        }
+  if (const auto *N = dynamic_cast<const CGALNefGeometry*>(geom.get())) {
+    if (!N->isEmpty()) {
+      addCapacity(N->p3->number_of_vertices());
+      for (auto it = N->p3->vertices_begin(); it != N->p3->vertices_end(); ++it) {
+        addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(it->point()));
       }
+    }
 #endif  // ENABLE_CGAL
 #ifdef ENABLE_MANIFOLD
-    } else if (const auto *mani = dynamic_cast<const ManifoldGeometry*>(chgeom.get())) {
-      addCapacity(mani->numVertices());
-      mani->foreachVertexUntilTrue([&](auto& p) {
-          addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(p));
-          return false;
-        });
+  } else if (const auto *mani = dynamic_cast<const ManifoldGeometry*>(geom.get())) {
+    addCapacity(mani->numVertices());
+    mani->foreachVertexUntilTrue([&](auto& p) {
+        addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(p));
+        return false;
+      });
 #endif  // ENABLE_MANIFOLD
-    } else if (const auto *ps = dynamic_cast<const PolySet*>(chgeom.get())) {
-      addCapacity(ps->indices.size() * 3);
-      for (const auto& p : ps->indices) {
-        for (const auto& ind : p) {
-          addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(ps->vertices[ind]));
-        }
+  } else if (const auto *ps = dynamic_cast<const PolySet*>(geom.get())) {
+    addCapacity(ps->indices.size() * 3);
+    for (const auto& p : ps->indices) {
+      for (const auto& ind : p) {
+        addPoint(CGALUtils::vector_convert<Hull_kernel::Point_3>(ps->vertices[ind]));
       }
     }
   }
+  
+  points = reindexer.getArray();
+  
+  // Cache the extracted points for future use
+  if (!points.empty()) {
+    std::vector<Vector3d> cache_points;
+    cache_points.reserve(points.size());
+    for (const auto& pt : points) {
+      cache_points.emplace_back(pt.x(), pt.y(), pt.z());
+    }
+    
+    auto cloud_for_cache = std::make_shared<IntermediateResults::PointCloud>(std::move(cache_points));
+    cache.insert(cache_key, cloud_for_cache);
+    PRINTDB("Point cloud cached for geometry: %1% points", points.size());
+  }
+  
+  return points;
+}
 
+std::unique_ptr<PolySet> applyHull(const Geometry::Geometries& children)
+{
+  using Hull_kernel = CGAL::Epick;
+  
+  // Collect point cloud with caching - use helper function for each geometry
+  std::vector<Hull_kernel::Point_3> all_points;
+  
+  for (const auto& item : children) {
+    auto& chgeom = item.second;
+    if (chgeom) {
+      auto points = extractPointCloudCached(chgeom);
+      all_points.insert(all_points.end(), points.begin(), points.end());
+    }
+  }
+  
+  // Remove duplicates from combined point cloud
+  Reindexer<Hull_kernel::Point_3> reindexer;
+  reindexer.reserve(all_points.size());
+  for (const auto& point : all_points) {
+    reindexer.lookup(point);
+  }
+  
   const auto &points = reindexer.getArray();
   if (points.size() <= 3) return nullptr;
 
