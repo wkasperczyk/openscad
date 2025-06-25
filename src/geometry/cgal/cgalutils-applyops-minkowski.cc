@@ -6,6 +6,7 @@
 #include <CGAL/convex_hull_3.h>
 
 #include "utils/printutils.h"
+#include "geometry/IntermediateCache.h"
 
 namespace CGALUtils {
 
@@ -47,33 +48,48 @@ std::shared_ptr<const Geometry> applyMinkowski3D(const Geometry::Geometries& chi
           PRINTDB("Minkowski: child %d is convex and %s", i % (ps?"PolySet":"Nef"));
           P[i].push_back(poly);
         } else {
-          CGAL_Nef_polyhedron3 decomposed_nef;
-
-          if (ps) {
-            PRINTDB("Minkowski: child %d is nonconvex PolySet, transforming to Nef and decomposing...", i);
-            auto p = CGALUtils::getNefPolyhedronFromGeometry(ps);
-            if (p && !p->isEmpty()) decomposed_nef = *p->p3;
+          // Check cache for convex decomposition first
+          auto& cache = IntermediateCacheManager::instance().convexDecompositionCache();
+          std::string cache_key = CacheKeyUtils::geometryKey(operands[i], "convex_decomposition");
+          
+          auto cached_decomposition = cache.get(cache_key);
+          if (cached_decomposition) {
+            PRINTDB("Minkowski: child %d using cached convex decomposition (%lu parts)", i % cached_decomposition->num_parts);
+            P[i] = cached_decomposition->convex_parts;
           } else {
-            PRINTDB("Minkowski: child %d is nonconvex Nef, decomposing...", i);
-            decomposed_nef = *nef->p3;
-          }
+            CGAL_Nef_polyhedron3 decomposed_nef;
 
-          t.start();
-          CGAL::convex_decomposition_3(decomposed_nef);
-
-          // the first volume is the outer volume, which ignored in the decomposition
-          for (auto ci = ++decomposed_nef.volumes_begin(); ci != decomposed_nef.volumes_end(); ++ci) {
-            if (ci->mark()) {
-              CGAL_Polyhedron poly;
-              decomposed_nef.convert_inner_shell_to_polyhedron(ci->shells_begin(), poly);
-              P[i].push_back(poly);
+            if (ps) {
+              PRINTDB("Minkowski: child %d is nonconvex PolySet, transforming to Nef and decomposing...", i);
+              auto p = CGALUtils::getNefPolyhedronFromGeometry(ps);
+              if (p && !p->isEmpty()) decomposed_nef = *p->p3;
+            } else {
+              PRINTDB("Minkowski: child %d is nonconvex Nef, decomposing...", i);
+              decomposed_nef = *nef->p3;
             }
+
+            t.start();
+            CGAL::convex_decomposition_3(decomposed_nef);
+
+            // the first volume is the outer volume, which ignored in the decomposition
+            for (auto ci = ++decomposed_nef.volumes_begin(); ci != decomposed_nef.volumes_end(); ++ci) {
+              if (ci->mark()) {
+                CGAL_Polyhedron poly;
+                decomposed_nef.convert_inner_shell_to_polyhedron(ci->shells_begin(), poly);
+                P[i].push_back(poly);
+              }
+            }
+
+            PRINTDB("Minkowski: decomposed into %d convex parts", P[i].size());
+            t.stop();
+            PRINTDB("Minkowski: decomposition took %f s", t.time());
+            
+            // Cache the decomposition result for future use
+            auto decomposition_result = std::make_shared<IntermediateResults::ConvexDecomposition>(std::move(P[i]));
+            P[i] = decomposition_result->convex_parts; // Copy back the parts for current use
+            cache.insert(cache_key, decomposition_result);
+            PRINTDB("Minkowski: cached convex decomposition for geometry %s", cache_key.substr(0, 20));
           }
-
-
-          PRINTDB("Minkowski: decomposed into %d convex parts", P[i].size());
-          t.stop();
-          PRINTDB("Minkowski: decomposition took %f s", t.time());
         }
       }
 

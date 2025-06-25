@@ -15,6 +15,7 @@
 #include "geometry/Geometry.h"
 #include "geometry/linalg.h"
 #include "geometry/GeometryUtils.h"
+#include "geometry/IntermediateCache.h"
 #include "glview/RenderSettings.h"
 #include "core/LinearExtrudeNode.h"
 #include "geometry/PolySet.h"
@@ -22,6 +23,7 @@
 #include "geometry/PolySetUtils.h"
 #include "utils/calc.h"
 #include "utils/degree_trig.h"
+#include "utils/printutils.h"
 
 namespace {
 
@@ -355,6 +357,25 @@ void add_slice_indices(PolygonIndices &indices, int slice_idx, int slice_stride,
 }
 
 size_t calc_num_slices(const LinearExtrudeNode& node, const Polygon2d& poly) {
+  // Generate cache key for slice parameters
+  std::string cache_key = CacheKeyUtils::sliceKey(
+    node.height[2], node.twist, node.scale_x, node.scale_y, 
+    node.fn, node.fs, node.fa);
+  
+  // Include polygon geometry in the key since slices depend on geometry dimensions
+  auto geom_ptr = std::shared_ptr<const Geometry>(new Polygon2d(poly));
+  cache_key += "_" + CacheKeyUtils::geometryKey(geom_ptr, "slice_calc");
+  
+  // Check cache for slice parameters
+  auto& cache = IntermediateCacheManager::instance().sliceParametersCache();
+  auto cached_params = cache.get(cache_key);
+  
+  if (cached_params) {
+    PRINTDB("Slice calculation: using cached slice count %1%", cached_params->slice_count);
+    return cached_params->slice_count;
+  }
+  
+  // Calculate slice count (original logic)
   size_t num_slices;
   if (node.has_slices) {
     num_slices = node.slices;
@@ -397,6 +418,33 @@ size_t calc_num_slices(const LinearExtrudeNode& node, const Polygon2d& poly) {
     // uniform or [1,1] scaling w/o twist needs only one slice
     num_slices = 1;
   }
+  
+  // Create and cache slice parameters
+  auto slice_params = std::make_shared<IntermediateResults::SliceParameters>();
+  slice_params->slice_count = num_slices;
+  
+  // Store individual slice parameters that could be cached for transformation matrices
+  slice_params->slice_heights.reserve(num_slices + 1);
+  slice_params->scale_factors_x.reserve(num_slices + 1);
+  slice_params->scale_factors_y.reserve(num_slices + 1);
+  slice_params->rotation_angles.reserve(num_slices + 1);
+  
+  // Calculate per-slice parameters for potential future caching
+  Vector2d full_scale(1 - node.scale_x, 1 - node.scale_y);
+  double full_rot = -node.twist;
+  
+  for (unsigned int i = 0; i <= num_slices; ++i) {
+    double slice_ratio = static_cast<double>(i) / num_slices;
+    slice_params->slice_heights.push_back(node.height[2] * slice_ratio);
+    slice_params->scale_factors_x.push_back(1.0 - full_scale[0] * slice_ratio);
+    slice_params->scale_factors_y.push_back(1.0 - full_scale[1] * slice_ratio);
+    slice_params->rotation_angles.push_back(full_rot * slice_ratio);
+  }
+  
+  // Cache the computed slice parameters
+  cache.insert(cache_key, slice_params);
+  PRINTDB("Slice calculation: computed and cached slice count %1%", num_slices);
+  
   return num_slices;
 }
 
@@ -486,10 +534,38 @@ std::unique_ptr<Geometry> extrudePolygon(const LinearExtrudeNode& node, const Po
   Vector2d full_scale(1 - node.scale_x, 1 - node.scale_y);
   double full_rot = -node.twist;
   auto full_height = (h2 - h1);
+  
+  // Get cache for transformation matrices
+  auto& cache = IntermediateCacheManager::instance().transformationMatrixCache();
+  
   for (unsigned int slice_idx = 0; slice_idx <= num_slices; slice_idx++) {
-    Eigen::Affine2d trans(
-      Eigen::Scaling(Vector2d(1,1) - full_scale * slice_idx / num_slices) *
-      Eigen::Affine2d(rotate_degrees(full_rot * slice_idx / num_slices)));
+    // Calculate transformation parameters for this slice
+    double scale_x = 1.0 - full_scale[0] * slice_idx / num_slices;
+    double scale_y = 1.0 - full_scale[1] * slice_idx / num_slices;
+    double rotation = full_rot * slice_idx / num_slices;
+    
+    // Generate cache key for this transformation
+    std::string cache_key = CacheKeyUtils::transformKey(scale_x, scale_y, rotation, slice_idx);
+    
+    // Try to get cached transformation matrix
+    auto cached_transform = cache.get(cache_key);
+    Eigen::Affine2d trans;
+    
+    if (cached_transform) {
+      // Use cached transformation matrix
+      trans = cached_transform->transform;
+      PRINTDB("Linear extrude: slice %1% using cached transformation matrix", slice_idx);
+    } else {
+      // Calculate new transformation matrix
+      trans = Eigen::Affine2d(
+        Eigen::Scaling(Vector2d(scale_x, scale_y)) *
+        Eigen::Affine2d(rotate_degrees(rotation)));
+      
+      // Cache the result
+      auto matrix_result = std::make_shared<IntermediateResults::TransformationMatrix>(trans);
+      cache.insert(cache_key, matrix_result);
+      PRINTDB("Linear extrude: slice %1% computed and cached transformation matrix", slice_idx);
+    }
 
     for (const auto& o : polyref.outlines()) {
       for (const auto& v : o.vertices) {

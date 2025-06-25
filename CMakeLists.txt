@@ -844,6 +844,7 @@ set(CORE_SOURCES
   src/geometry/ClipperUtils.cc
   src/geometry/Geometry.cc
   src/geometry/GeometryCache.cc
+  src/geometry/IntermediateCache.cc
   src/geometry/GeometryEvaluator.cc
   src/geometry/GeometryUtils.cc
   src/geometry/PolySet.cc
@@ -1298,6 +1299,8 @@ if(ENABLE_GUI_TESTS)
     src/guitests/TestTabManager.h
     src/guitests/TestMainWindow.h
     src/guitests/UXTest.h
+    src/guitests/TestIntermediateCache.h
+    src/guitests/TestLinearExtrudeCache.h
   )
 
   set(GUITESTS_SOURCES
@@ -1306,6 +1309,8 @@ if(ENABLE_GUI_TESTS)
     src/guitests/TestTabManager.cc
     src/guitests/TestMainWindow.cc
     src/guitests/UXTest.cc
+    src/guitests/TestIntermediateCache.cc
+    src/guitests/TestLinearExtrudeCache.cc
   )
 
   list(APPEND Sources ${GUITESTS_SOURCES} ${GUITESTS_HEADERS})
