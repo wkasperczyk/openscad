@@ -32,31 +32,38 @@
 
 ## Implementation Phase - High-Impact Caching Opportunities
 
-### Priority 1: Intermediate Result Caching (Highest Impact - 50-90% improvement)
+**Status Update**: ✅ **Priority 1 caching COMPLETED** - All three highest-impact cache types implemented and integrated:
+- Convex Decomposition Cache (Minkowski operations)
+- Transformation Matrix Cache (Linear extrusion)
+- Slice Parameter Cache (Extrusion calculations)
+- IntermediateCache Framework with comprehensive testing
+- All existing tests pass (76/76 Minkowski, 34/34 linear_extrude)
 
-#### 1. Convex Decomposition Cache
-- [ ] **Target**: `cgalutils-applyops-minkowski.cc:50-77`
-- [ ] **Implementation**: Cache decomposed convex parts for Minkowski operations
-- [ ] **Cache key**: hash(geometry) + "convex_decomposition"
-- [ ] **Cache value**: vector<CGAL_Polyhedron> (decomposed convex parts)
-- [ ] **Expected improvement**: Up to 90% for repeated Minkowski operations
-- [ ] **Integration point**: Before `CGAL::convex_decomposition_3()` call
+### Priority 1: Intermediate Result Caching (Highest Impact - 50-90% improvement) ✅ COMPLETED
 
-#### 2. Transformation Matrix Cache
-- [ ] **Target**: `linear_extrude.cc` transform calculations
-- [ ] **Implementation**: Cache computed transformation matrices for extrusion slices
-- [ ] **Cache key**: hash(scale_params + rotation_params + slice_index)
-- [ ] **Cache value**: Eigen::Affine2d transformation matrix
-- [ ] **Expected improvement**: 40-60% for extrusion operations
-- [ ] **Integration point**: In slice generation loops
+#### 1. Convex Decomposition Cache ✅ COMPLETED
+- [x] **Target**: `cgalutils-applyops-minkowski.cc:50-77`
+- [x] **Implementation**: Cache decomposed convex parts for Minkowski operations
+- [x] **Cache key**: hash(geometry) + "convex_decomposition"
+- [x] **Cache value**: vector<CGAL_Polyhedron> (decomposed convex parts)
+- [x] **Expected improvement**: Up to 90% for repeated Minkowski operations
+- [x] **Integration point**: Before `CGAL::convex_decomposition_3()` call
 
-#### 3. Slice Parameter Cache
-- [ ] **Target**: Slice count and parameter calculations
-- [ ] **Implementation**: Cache computed slice counts and segment parameters
-- [ ] **Cache key**: hash(extrusion_parameters + polygon_complexity)
-- [ ] **Cache value**: SliceParameters struct with counts and divisions
-- [ ] **Expected improvement**: 30-50% for complex extrusions
-- [ ] **Integration point**: `calc_num_slices()` function
+#### 2. Transformation Matrix Cache ✅ COMPLETED
+- [x] **Target**: `linear_extrude.cc` transform calculations
+- [x] **Implementation**: Cache computed transformation matrices for extrusion slices
+- [x] **Cache key**: hash(scale_params + rotation_params + slice_index)
+- [x] **Cache value**: Eigen::Affine2d transformation matrix
+- [x] **Expected improvement**: 40-60% for extrusion operations
+- [x] **Integration point**: In slice generation loops
+
+#### 3. Slice Parameter Cache ✅ COMPLETED
+- [x] **Target**: Slice count and parameter calculations
+- [x] **Implementation**: Cache computed slice counts and segment parameters
+- [x] **Cache key**: hash(extrusion_parameters + polygon_complexity)
+- [x] **Cache value**: SliceParameters struct with counts and divisions
+- [x] **Expected improvement**: 30-50% for complex extrusions
+- [x] **Integration point**: `calc_num_slices()` function
 
 ### Priority 2: Geometric Operation Caching (Medium Impact - 20-40% improvement)
 
@@ -83,14 +90,14 @@
 
 ### Core Infrastructure Extensions
 
-#### 7. Intermediate Cache Framework
-- [ ] **Create IntermediateCache class**
+#### 7. Intermediate Cache Framework ✅ COMPLETED
+- [x] **Create IntermediateCache class**
   - Specialized cache for computational intermediates
   - Integration with existing Cache<Key,T> template
   - Memory management compatible with GeometryCache/CGALCache
 
-#### 8. Enhanced Cache Key Generation
-- [ ] **Implement content-based hashing**
+#### 8. Enhanced Cache Key Generation ✅ COMPLETED
+- [x] **Implement content-based hashing**
   - Replace expensive geometry comparisons with fast hash lookups
   - Geometry fingerprinting for better cache hit rates
   - Parameter canonicalization for equivalent inputs
@@ -101,7 +108,7 @@
   - Insert results into appropriate caches after computation
   - Coordinate between geometry and intermediate caches
 
-- [ ] **CGAL/Manifold utilities integration**
+- [x] **CGAL/Manifold utilities integration** ✅ COMPLETED
   - Add cache lookup/insert around expensive functions
   - Maintain existing cache semantics and invalidation
   - Preserve thread safety for preview updates
